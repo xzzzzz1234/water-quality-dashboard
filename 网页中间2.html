@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>“天空哨兵”——AI驱动的水域环境智能感知平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Add Leaflet CSS and JS for map integration -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha2d8N2y/rliCHo/zzf4F8GvM2sL87eJ/NYxU8s7n+r9N/Q==" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha2d8N2y/rliCHo/zzf4F8GvM2sL87eJ/NYxU8s7n+r9N/Q==" crossorigin=""></script>
+
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-image: url('static/bg.png'); /* Local background image */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            color: #333;
+        }
+
+        /* New glass effect style */
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.85); /* 85% opacity, less transparent for readability */
+            -webkit-backdrop-filter: blur(8px); /* Frosted glass effect for Safari */
+            backdrop-filter: blur(8px); /* Standard frosted glass effect */
+            border: 1px solid rgba(255, 255, 255, 0.3); /* Subtle border to define edges */
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            /* Make chart containers flexible within their grid cells */
+            height: 300px; /* Consistent height for charts */
+            max-height: 40vh; /* Responsive max height */
+        }
+
+        /* Adjusted navigation item active state color to match the image's teal/blue theme */
+        .nav-item.active {
+            background-color: #427C9F; /* A lighter, more active blue-teal */
+            color: white;
+        }
+
+        .message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+
+        .message-box.show {
+            display: block;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .message-box.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message-box.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message-box.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .chat-message {
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .chat-message.user {
+            background-color: #e0f7fa;
+            color: #00796b;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+
+        .chat-message.ai {
+            background-color: #f3e5f5;
+            color: #6a1b9a;
+            align-self: flex-start;
+            margin-right: auto;
+        }
+
+        .chat-message.system {
+            background-color: #ffe0b2;
+            color: #e65100;
+            align-self: center;
+            text-align: center;
+            font-style: italic;
+        }
+        /* Specific style for the map container */
+        #map {
+            height: 450px; /* Adjusted height for a larger map area */
+            width: 100%;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem; /* Add some space below the map */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="auth-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md transform transition-all">
+            <div class="mb-6">
+                <div class="flex border-b border-gray-200">
+                    <button id="login-tab" class="py-2 px-4 font-semibold text-blue-600 border-b-2 border-blue-600 flex-1 text-center">登录</button>
+                    <button id="register-tab" class="py-2 px-4 font-semibold text-gray-500 flex-1 text-center">注册</button>
+                </div>
+            </div>
+
+            <div id="login-form">
+                <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">欢迎回来</h2>
+                <form onsubmit="event.preventDefault(); handleLogin();">
+                    <div class="mb-4">
+                        <label for="login-phone" class="block text-gray-700 text-sm font-bold mb-2">手机号</label>
+                        <input id="login-phone" type="text" placeholder="请输入手机号" value="18814893256" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="text-xs text-gray-500 mt-1">管理员测试账号: 18814893256</p>
+                    </div>
+                    <div class="mb-6">
+                        <label for="login-password" class="block text-gray-700 text-sm font-bold mb-2">密码</label>
+                        <input id="login-password" type="password" placeholder="请输入密码" value="password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                         <p class="text-xs text-gray-500 mt-1">通用测试密码: password</p>
+                    </div>
+                    <div id="login-error" class="text-red-500 text-sm mb-4 h-5"></div>
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300">
+                        登录
+                    </button>
+                </form>
+            </div>
+
+            <div id="register-form" class="hidden">
+                <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">创建新账户</h2>
+                <form onsubmit="event.preventDefault(); handleRegister();">
+                    <div class="mb-4">
+                        <label for="register-phone" class="block text-gray-700 text-sm font-bold mb-2">手机号</label>
+                        <input id="register-phone" type="text" placeholder="请输入手机号" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="register-password" class="block text-gray-700 text-sm font-bold mb-2">密码</label>
+                        <input id="register-password" type="password" placeholder="至少8位，包含字母和数字" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="register-otp" class="block text-gray-700 text-sm font-bold mb-2">短信验证码</label>
+                        <div class="flex">
+                            <input id="register-otp" type="text" placeholder="6位验证码" class="shadow appearance-none border rounded-l w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button type="button" id="send-otp-btn" onclick="handleSendOtp()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-r transition duration-300 whitespace-nowrap">
+                                发送验证码
+                            </button>
+                        </div>
+                    </div>
+                    <div id="register-error" class="text-red-500 text-sm mb-4 h-5"></div>
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300">
+                        注册
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden flex h-screen">
+        <aside class="w-64 bg-[#2A3F54] text-gray-200 flex flex-col transition-all duration-300">
+            <div class="p-4 flex items-center space-x-3 border-b border-gray-700">
+                <img src="https://img.icons8.com/plasticine/100/water.png" alt="Logo" class="w-10 h-10">
+                <h1 class="text-xl font-bold">AI水质感知</h1>
+            </div>
+            <nav class="flex-1 px-2 py-4 space-y-2">
+                <a href="#dashboard" class="nav-item flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-[#3D5C76] active" data-page="dashboard-page"><span class="mr-3 text-lg">📊</span><span>实时监控</span></a>
+                <a href="#location-data-management" id="admin-link" class="hidden nav-item flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-[#3D5C76]" data-page="location-data-management-page"><span class="mr-3 text-lg">⚙️</span><span>数据管理</span></a>
+            </nav>
+            <div class="p-4 border-t border-gray-700">
+                 <div id="user-info" class="text-center mb-4"></div>
+                 <button id="logout-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition duration-300">退出登录</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <header class="glass-effect rounded-lg p-4 flex justify-between items-center m-6 mb-0">
+                <h2 class="text-xl font-semibold text-gray-700">“天空哨兵”——AI驱动的水域环境智能感知平台</h2>
+                <div class="flex items-center space-x-4 text-xl text-gray-600">
+                    <span title="关于项目" class="cursor-pointer hover:text-blue-500">ℹ️</span>
+                    <span title="GitHub" class="cursor-pointer hover:text-blue-500">🔗</span>
+                    <span title="全屏" id="fullscreen-btn" class="cursor-pointer hover:text-blue-500">🖥️</span>
+                </div>
+            </header>
+
+            <div class="flex-1 p-6 overflow-y-auto">
+                <div id="dashboard-page" class="page">
+                    <!-- Optimized layout for summary cards and map -->
+                    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                        <div class="lg:col-span-2 flex flex-col"> <!-- Added flex-col to fill height -->
+                            <!-- Map container -->
+                            <div id="map" class="glass-effect rounded-lg flex-grow"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6">
+                            <!-- Summary Cards - will be dynamically updated -->
+                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">区域平均悬沙</h4><p class="text-3xl font-bold text-blue-600 mt-2" id="avg-tss">计算中...</p></div>
+                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">区域平均盐度</h4><p class="text-3xl font-bold text-green-600 mt-2" id="avg-salinity">计算中...</p></div>
+                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">AI模型精度 (R²)</h4><p class="text-3xl font-bold text-purple-600 mt-2">0.93</p></div>
+                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">当前预警</h4><p class="text-3xl font-bold text-orange-500 mt-2">0个</p></div>
+                        </div>
+                    </section>
+
+                    <!-- Optimized chart section layout -->
+                    <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+                        <!-- Suspended Solids Concentration Chart -->
+                        <div class="glass-effect p-6 rounded-lg">
+                            <h3 class="font-bold text-lg mb-4">悬沙浓度(TSS) 真实值 vs 反演值</h3>
+                             <div class="chart-container">
+                                <canvas id="tss-chart"></canvas>
+                            </div>
+                        </div>
+                        <!-- Salinity Chart -->
+                        <div class="glass-effect p-6 rounded-lg">
+                            <h3 class="font-bold text-lg mb-4">盐度 真实值 vs 反演值</h3>
+                             <div class="chart-container">
+                                <canvas id="salinity-chart"></canvas>
+                            </div>
+                        </div>
+                        <!-- Turbidity Chart -->
+                        <div class="glass-effect p-6 rounded-lg">
+                            <h3 class="font-bold text-lg mb-4">浊度 真实值 vs 反演值</h3>
+                             <div class="chart-container">
+                                <canvas id="turbidity-chart"></canvas>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="glass-effect p-6 rounded-lg">
+                         <h3 class="font-bold text-lg mb-4">小水滴</h3>
+                         <div class="flex flex-col md:flex-row gap-6">
+                            <div class="flex-1 border border-gray-200/50 rounded-lg p-4 bg-transparent shadow-inner">
+                                <div id="chat-window" class="h-64 overflow-y-auto mb-4 space-y-4 flex flex-col">
+                                    <div class="chat-message ai">你好！我是水质AI助手‘小水滴’。您可以向我提问，或点击旁边按钮生成一份数据简报。</div>
+                                </div>
+                                <div class="flex">
+                                    <input type="text" id="chat-input" placeholder="请在此输入您的问题..." class="flex-grow border rounded-l-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <button id="send-chat-btn" class="bg-blue-600 text-white px-4 rounded-r-lg hover:bg-blue-700">发送</button>
+                                </div>
+                            </div>
+                            <div class="w-full md:w-64">
+                                <h4 class="font-bold mb-2">快捷分析</h4>
+                                <button id="generate-report-btn" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition">一键生成AI分析简报</button>
+                                <p class="text-sm text-gray-500 mt-2">点击后，报告将直接显示在左侧对话框中。</p>
+                            </div>
+                         </div>
+                    </section>
+                </div>
+
+                <div id="location-data-management-page" class="page hidden">
+                    <div class="glass-effect p-8 rounded-lg">
+                        <h1 class="text-3xl font-bold mb-6 text-gray-800">地点数据管理</h1>
+                        <p class="mb-6 text-gray-700">此页面允许管理员查看和管理水质监测地点的数据，包括七堡和盐官。</p>
+
+                        <!-- TSS and Turbidity Table - independent suspended solids and turbidity table -->
+                        <div class="mb-8">
+                            <h2 class="text-2xl font-semibold mb-4 text-gray-800">悬沙 (TSS) 和浊度数据</h2>
+                            <div class="overflow-x-auto rounded-lg shadow-md">
+                                <table class="min-w-full bg-white border border-gray-200">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">ID</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">地点</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">真实悬沙 (mg/L)</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">反演悬沙 (mg/L)</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">真实浊度 (NTU)</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">反演浊度 (NTU)</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tss-turbidity-data-table-body" class="divide-y divide-gray-200">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Salinity Table - independent salinity table -->
+                        <div class="mb-8">
+                            <h2 class="text-2xl font-semibold mb-4 text-gray-800">盐度数据</h2>
+                            <div class="overflow-x-auto rounded-lg shadow-md">
+                                <table class="min-w-full bg-white border border-gray-200">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">ID</th>
+                                            <!-- Removed Location column from Salinity Table -->
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">真实盐度 (psu)</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">反演盐度 (psu)</th>
+                                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider border-b">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="salinity-data-table-body" class="divide-y divide-gray-200">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="mb-8 p-6 bg-transparent rounded-lg border border-gray-200/50 shadow-md">
+                            <h2 class="text-2xl font-semibold mb-4 text-gray-800">更新地点数据</h2>
+                            <form onsubmit="event.preventDefault(); handleUpdateLocationData();">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="mb-4 md:col-span-2">
+                                        <label for="update-data-id" class="block text-gray-700 text-sm font-bold mb-2">数据ID</label>
+                                        <input id="update-data-id" type="number" placeholder="请输入要更新的数据ID" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="update-data-real-tss" class="block text-gray-700 text-sm font-bold mb-2">真实悬沙 (mg/L)</label>
+                                        <input id="update-data-real-tss" type="number" step="0.1" placeholder="真实悬沙值" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="update-data-inferred-tss" class="block text-gray-700 text-sm font-bold mb-2">反演悬沙 (mg/L)</label>
+                                        <input id="update-data-inferred-tss" type="number" step="0.1" placeholder="反演悬沙值" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="update-data-real-salinity" class="block text-gray-700 text-sm font-bold mb-2">真实盐度 (psu)</label>
+                                        <input id="update-data-real-salinity" type="number" step="0.01" placeholder="真实盐度值" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="update-data-inferred-salinity" class="block text-gray-700 text-sm font-bold mb-2">反演盐度 (psu)</label>
+                                        <input id="update-data-inferred-salinity" type="number" step="0.01" placeholder="反演盐度值" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="update-data-real-turbidity" class="block text-gray-700 text-sm font-bold mb-2">真实浊度 (NTU)</label>
+                                        <input id="update-data-real-turbidity" type="number" step="0.1" placeholder="真实浊度值" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="update-data-inferred-turbidity" class="block text-gray-700 text-sm font-bold mb-2">反演浊度 (NTU)</label>
+                                        <input id="update-data-inferred-turbidity" type="number" step="0.1" placeholder="反演浊度值" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </div>
+                                </div>
+
+                                <div id="update-data-error" class="text-red-500 text-sm mb-4 h-5"></div>
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300">
+                                    更新数据
+                                </button>
+                            </form>
+                        </div>
+
+                        <div class="p-6 bg-transparent rounded-lg border border-gray-200/50 shadow-md">
+                            <h2 class="text-2xl font-semibold mb-4 text-gray-800">删除地点数据</h2>
+                            <form onsubmit="event.preventDefault(); handleDeleteLocationDataConfirmation();">
+                                <div class="mb-4">
+                                    <label for="delete-data-id" class="block text-gray-700 text-sm font-bold mb-2">数据ID</label>
+                                    <input id="delete-data-id" type="number" placeholder="请输入要删除的数据ID" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div id="delete-data-error" class="text-red-500 text-sm mb-4 h-5"></div>
+                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300">
+                                    删除数据
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="message-box" class="message-box"></div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:5000';
+
+        document.addEventListener('DOMContentLoaded', function () {
+            let currentUser = null;
+            let currentOtp = null;
+
+            const authModal = document.getElementById('auth-modal');
+            const appContainer = document.getElementById('app-container');
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const loginTab = document.getElementById('login-tab');
+            const registerTab = document.getElementById('register-tab');
+            const loginError = document.getElementById('login-error');
+            const registerError = document.getElementById('register-error');
+            const adminLink = document.getElementById('admin-link');
+            const logoutBtn = document.getElementById('logout-btn');
+            const userInfo = document.getElementById('user-info');
+
+            // Updated table body references for separate tables
+            const tssTurbidityDataTableBody = document.getElementById('tss-turbidity-data-table-body');
+            const salinityDataTableBody = document.getElementById('salinity-data-table-body');
+
+            const updateDataIdInput = document.getElementById('update-data-id');
+            const updateDataRealTssInput = document.getElementById('update-data-real-tss');
+            const updateDataInferredTssInput = document.getElementById('update-data-inferred-tss');
+            const updateDataRealSalinityInput = document.getElementById('update-data-real-salinity');
+            const updateDataInferredSalinityInput = document.getElementById('update-data-inferred-salinity');
+            const updateDataRealTurbidityInput = document.getElementById('update-data-real-turbidity');
+            const updateDataInferredTurbidityInput = document.getElementById('update-data-inferred-turbidity');
+
+            const deleteDataIdInput = document.getElementById('delete-data-id');
+            const updateDataError = document.getElementById('update-data-error');
+            const deleteDataError = document.getElementById('delete-data-error');
+            const messageBox = document.getElementById('message-box');
+
+            const navItems = document.querySelectorAll('.nav-item');
+            const pages = document.querySelectorAll('.page');
+
+            // Chat related elements
+            const chatInput = document.getElementById('chat-input');
+            const sendChatBtn = document.getElementById('send-chat-btn');
+            const chatWindow = document.getElementById('chat-window');
+            const generateReportBtn = document.getElementById('generate-report-btn');
+
+
+            navItems.forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+
+                    navItems.forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+
+                    const pageId = item.getAttribute('data-page');
+                    pages.forEach(p => {
+                        if (p.id === pageId) {
+                            p.classList.remove('hidden');
+                            if (pageId === 'location-data-management-page' && currentUser && currentUser.role === 'admin') {
+                                fetchLocationData();
+                            }
+                        } else {
+                            p.classList.add('hidden');
+                        }
+                    });
+                });
+            });
+
+            function showMessage(message, type = 'info', duration = 3000) {
+                messageBox.textContent = message;
+                messageBox.className = 'message-box show ' + type;
+                setTimeout(() => {
+                    messageBox.classList.remove('show');
+                }, duration);
+            }
+
+            window.handleLogin = async function() {
+                const phone = document.getElementById('login-phone').value;
+                const password = document.getElementById('login-password').value;
+                loginError.textContent = '';
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone, password })
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        currentUser = { phone: data.phone, role: data.role, token: data.access_token };
+                        sessionStorage.setItem('authToken', JSON.stringify(currentUser));
+                        showMessage('登录成功！', 'success');
+                        showApp();
+                    } else {
+                        loginError.textContent = data.message || '登录失败。';
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    loginError.textContent = '网络错误，请确保后端服务器正在运行。';
+                    showMessage('登录失败：网络错误，请确保后端服务器正在运行。', 'error');
+                }
+            }
+
+            window.handleRegister = async function() {
+                const phone = document.getElementById('register-phone').value;
+                const password = document.getElementById('register-password').value;
+                const otp = document.getElementById('register-otp').value;
+                registerError.textContent = '';
+
+                if(!phone || !password || !otp) {
+                    registerError.textContent = '所有字段均为必填项。';
+                    return;
+                }
+                if(password.length < 8) {
+                    registerError.textContent = '密码长度不能少于8位。';
+                    return;
+                }
+                if(!currentOtp || otp !== currentOtp) {
+                    registerError.textContent = '验证码错误。';
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/register`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone, password })
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        currentOtp = null;
+                        showMessage('注册成功！请使用新账户登录。', 'success');
+                        switchToLoginTab();
+                    } else {
+                        registerError.textContent = data.message || '注册失败。';
+                    }
+                } catch (error) {
+                    console.error('Registration error:', error);
+                    registerError.textContent = '网络错误，请确保后端服务器正在运行。';
+                    showMessage('注册失败：网络错误，请确保后端服务器正在运行。', 'error');
+                }
+            }
+
+            window.handleSendOtp = function() {
+                const phone = document.getElementById('register-phone').value;
+                const otpBtn = document.getElementById('send-otp-btn');
+                registerError.textContent = '';
+
+                if (!phone || !/1\d{10}/.test(phone)) {
+                    registerError.textContent = '请输入有效的手机号码。';
+                    return;
+                }
+
+                otpBtn.disabled = true;
+                let countdown = 60;
+                otpBtn.textContent = `${countdown}s`;
+
+                const interval = setInterval(() => {
+                    countdown--;
+                    otpBtn.textContent = `${countdown}s`;
+                    if (countdown <= 0) {
+                        clearInterval(interval);
+                        otpBtn.textContent = '发送验证码';
+                        otpBtn.disabled = false;
+                    }
+                }, 1000);
+
+                currentOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                setTimeout(() => {
+                    showMessage('模拟发送验证码：' + currentOtp, 'info');
+                }, 1000);
+            }
+
+            function showApp() {
+                authModal.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                appContainer.classList.add('flex');
+
+                userInfo.innerHTML = `<p class="font-semibold">${currentUser.phone}</p><p class="text-sm text-gray-400">${currentUser.role === 'admin' ? '管理员' : '普通用户'}</p>`;
+
+                if (currentUser.role === 'admin') {
+                    adminLink.classList.remove('hidden');
+                } else {
+                    adminLink.classList.add('hidden');
+                }
+
+                initializeCharts(); // Ensure charts are initialized after app is shown
+                initializeMap(); // Initialize the map after app is shown
+            }
+
+            function logout() {
+                currentUser = null;
+                sessionStorage.removeItem('authToken');
+                authModal.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                appContainer.classList.remove('flex');
+                adminLink.classList.add('hidden');
+                loginError.textContent = '';
+                document.getElementById('login-form').reset();
+                showMessage('已退出登录。', 'info');
+            }
+
+            logoutBtn.addEventListener('click', logout);
+
+            function switchToLoginTab() {
+                loginTab.classList.add('text-blue-600', 'border-blue-600');
+                loginTab.classList.remove('text-gray-500');
+                registerTab.classList.remove('text-blue-600', 'border-blue-600');
+                registerTab.classList.add('text-gray-500');
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+            }
+
+            function switchToRegisterTab() {
+                registerTab.classList.add('text-blue-600', 'border-blue-600');
+                registerTab.classList.remove('text-gray-500');
+                loginTab.classList.remove('text-blue-600', 'border-blue-600');
+                loginTab.classList.add('text-gray-500');
+                registerForm.classList.remove('hidden');
+                loginForm.classList.add('hidden');
+            }
+
+            loginTab.addEventListener('click', switchToLoginTab);
+            registerTab.addEventListener('click', switchToRegisterTab);
+
+            async function fetchLocationData() {
+                // This function is for the admin data table, it still requires admin role to view.
+                if (!currentUser || currentUser.role !== 'admin') {
+                    tssTurbidityDataTableBody.innerHTML = '<tr><td colspan="7" class="py-2 px-4 text-center text-red-500">您没有权限查看此数据。</td></tr>';
+                    salinityDataTableBody.innerHTML = '<tr><td colspan="4" class="py-2 px-4 text-center text-red-500">您没有权限查看此数据。</td></tr>'; // Updated colspan
+                    showMessage('您没有权限查看此数据。', 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/data`, {
+                        headers: {
+                            'Authorization': `Bearer ${currentUser.token}`
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        renderLocationDataTable(data);
+                    } else {
+                        // Display the exact message from the backend for debugging
+                        showMessage(data.message || '获取数据失败。', 'error');
+                        tssTurbidityDataTableBody.innerHTML = `<tr><td colspan="7" class="py-2 px-4 text-center text-red-500">${data.message || '获取数据失败。'}</td></tr>`;
+                        salinityDataTableBody.innerHTML = `<tr><td colspan="4" class="py-2 px-4 text-center text-red-500">${data.message || '获取数据失败。'}</td></tr>`; // Updated colspan
+                    }
+                } catch (error) {
+                    console.error('Fetch location data error:', error);
+                    showMessage('获取地点数据失败：网络错误，请确保后端服务器正在运行。', 'error');
+                    tssTurbidityDataTableBody.innerHTML = '<tr><td colspan="7" class="py-2 px-4 text-center text-red-500">网络错误，无法获取地点数据。</td></tr>';
+                    salinityDataTableBody.innerHTML = '<tr><td colspan="4" class="py-2 px-4 text-center text-red-500">网络错误，无法获取地点数据。</td></tr>'; // Updated colspan
+                }
+            }
+
+            function renderLocationDataTable(data) {
+                // Get references to both table bodies
+                const tssTurbidityTableBody = document.getElementById('tss-turbidity-data-table-body');
+                const salinityTableBody = document.getElementById('salinity-data-table-body');
+
+                // Clear existing content
+                tssTurbidityTableBody.innerHTML = '';
+                salinityTableBody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tssTurbidityTableBody.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-gray-500">暂无悬沙和浊度数据。</td></tr>';
+                    salinityTableBody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-gray-500">暂无盐度数据。</td></tr>'; // Updated colspan
+                    return;
+                }
+
+                data.forEach(item => {
+                    // Populate TSS and Turbidity table
+                    const tssTurbidityRow = tssTurbidityTableBody.insertRow();
+                    tssTurbidityRow.className = 'hover:bg-gray-50';
+                    tssTurbidityRow.innerHTML = `
+                        <td class="py-2 px-4 border-b text-sm">${item.id || 'N/A'}</td>
+                        <td class="py-2 px-4 border-b text-sm">${item.location || '未知地点'}</td>
+                        <td class="py-2 px-4 border-b text-sm">${item.real_tss}</td>
+                        <td class="py-2 px-4 border-b text-sm">${item.inferred_tss}</td>
+                        <td class="py-2 px-4 border-b text-sm">${item.real_turbidity}</td>
+                        <td class="py-2 px-4 border-b text-sm">${item.inferred_turbidity}</td>
+                        <td class="py-2 px-4 border-b text-sm">
+                            <button onclick="populateEditLocationForm(${item.id}, '${item.location}', ${item.real_tss}, ${item.inferred_tss}, ${item.real_salinity}, ${item.inferred_salinity}, ${item.real_turbidity}, ${item.inferred_turbidity})" class="bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-3 py-1 rounded mr-2 transition">编辑</button>
+                            <button onclick="handleDeleteLocationDataConfirmation(${item.id})" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded transition">删除</button>
+                        </td>
+                    `;
+
+                    // Populate Salinity table - REMOVED LOCATION COLUMN
+                    const salinityRow = salinityTableBody.insertRow();
+                    salinityRow.className = 'hover:bg-gray-50';
+                    salinityRow.innerHTML = `
+                        <td class="py-2 px-4 border-b text-sm">${item.id || 'N/A'}</td>
+                        <td class="py-2 px-4 border-b text-sm">${item.real_salinity}</td>
+                        <td class="py-2 px-4 border-b text-sm">${item.inferred_salinity}</td>
+                        <td class="py-2 px-4 border-b text-sm">
+                             <button onclick="populateEditLocationForm(${item.id}, '${item.location}', ${item.real_tss}, ${item.inferred_tss}, ${item.real_salinity}, ${item.inferred_salinity}, ${item.real_turbidity}, ${item.inferred_turbidity})" class="bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-3 py-1 rounded mr-2 transition">编辑</button>
+                            <button onclick="handleDeleteLocationDataConfirmation(${item.id})" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded transition">删除</button>
+                        </td>
+                    `;
+                });
+            }
+
+            window.populateEditLocationForm = function(id, location, real_tss, inferred_tss, real_salinity, inferred_salinity, real_turbidity, inferred_turbidity) {
+                updateDataIdInput.value = id;
+                updateDataRealTssInput.value = real_tss;
+                updateDataInferredTssInput.value = inferred_tss;
+                updateDataRealSalinityInput.value = real_salinity;
+                updateDataInferredSalinityInput.value = inferred_salinity;
+                updateDataRealTurbidityInput.value = real_turbidity;
+                updateDataInferredTurbidityInput.value = inferred_turbidity;
+                showMessage(`准备编辑ID为 ${id} 的数据 (${location})`, 'info');
+            }
+
+            window.handleUpdateLocationData = async function() {
+                if (!currentUser || currentUser.role !== 'admin') {
+                    updateDataError.textContent = '您没有权限执行此操作。';
+                    return;
+                }
+                const id = updateDataIdInput.value;
+                const real_tss = updateDataRealTssInput.value;
+                const inferred_tss = updateDataInferredTssInput.value;
+                const real_salinity = updateDataRealSalinityInput.value;
+                const inferred_salinity = updateDataInferredSalinityInput.value;
+                const real_turbidity = updateDataRealTurbidityInput.value;
+                const inferred_turbidity = updateDataInferredTurbidityInput.value;
+
+                updateDataError.textContent = '';
+
+                if (!id || real_tss === '' || inferred_tss === '' || real_salinity === '' || inferred_salinity === '' || real_turbidity === '' || inferred_turbidity === '') {
+                    updateDataError.textContent = '所有字段均为必填项。';
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/data/${id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${currentUser.token}`
+                        },
+                        body: JSON.stringify({
+                            real_tss: parseFloat(real_tss),
+                            inferred_tss: parseFloat(inferred_tss),
+                            real_salinity: parseFloat(real_salinity),
+                            inferred_salinity: parseFloat(inferred_salinity),
+                            real_turbidity: parseFloat(real_turbidity),
+                            inferred_turbidity: parseFloat(inferred_turbidity)
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showMessage('数据更新成功！', 'success');
+                        fetchLocationData();
+                    } else {
+                        updateDataError.textContent = data.message || '数据更新失败。';
+                    }
+                } catch (error) {
+                    console.error('Update location data error:', error);
+                    updateDataError.textContent = '网络错误，请确保后端服务器正在运行。';
+                    showMessage('更新地点数据失败：网络错误，请确保后端服务器正在运行。', 'error');
+                }
+            }
+
+            window.handleDeleteLocationDataConfirmation = function(idToDelete) {
+                if (!currentUser || currentUser.role !== 'admin') {
+                    deleteDataError.textContent = '您没有权限执行此操作。';
+                    return;
+                }
+                const id = idToDelete || deleteDataIdInput.value;
+                if (!id) {
+                    deleteDataError.textContent = '请输入要删除的数据ID。';
+                    return;
+                }
+
+                // Replacing confirm() with a custom modal/message box for better UX in iframe
+                showMessage(`确定要删除ID为 ${id} 的数据吗？此操作不可逆。`, 'info', 5000); // Show message for 5 seconds
+                // For a true confirmation, you'd need a custom modal with Yes/No buttons
+                // For now, if user clicks again, it proceeds directly as a simplified approach.
+                // In a real app, implement a proper confirmation modal.
+                setTimeout(() => { // Simulate a delay for user to read the message
+                    if (confirm(`再次确认删除ID为 ${id} 的数据？`)) { // Fallback to browser confirm for simplicity in this demo
+                        handleDeleteLocationData(id);
+                    }
+                }, 1000); // Small delay before asking for confirmation again
+            }
+
+            async function handleDeleteLocationData(id) {
+                deleteDataError.textContent = '';
+                try {
+                    const response = await fetch(`${API_BASE_URL}/data/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${currentUser.token}`
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showMessage('数据删除成功！', 'success');
+                        fetchLocationData();
+                    } else {
+                        deleteDataError.textContent = data.message || '数据删除失败。';
+                    }
+                } catch (error) {
+                    console.error('Delete location data error:', error);
+                    deleteDataError.textContent = '网络错误，请确保后端服务器正在运行。';
+                    showMessage('删除地点数据失败：网络错误，请确保后端服务器正在运行。', 'error');
+                }
+            }
+
+            let tssChart, salinityChart, turbidityChart;
+
+            // Updated initializeCharts to fetch actual data and plot it
+            async function initializeCharts() {
+                // Initialize specific arrays for each chart
+                let tssTurbidityChartLabels = [];
+                let realTssData = [];
+                let inferredTssData = [];
+                let realTurbidityData = [];
+                let inferredTurbidityData = [];
+
+                let salinityChartLabels = [];
+                let realSalinityData = [];
+                let inferredSalinityData = [];
+
+                // Variables for calculating averages
+                let realTssSum = 0;
+                let tssCount = 0;
+                let realSalinitySum = 0;
+                let salinityCount = 0;
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/data`, {
+                    headers: {
+                           'Authorization': `Bearer ${currentUser.token}`
+                             }
+                    });
+                    const data = await response.json();
+
+                    if (response.ok && data.length > 0) {
+                        data.forEach(item => {
+                            // Process data for TSS and Turbidity charts (only if both real and inferred values exist for these)
+                            if (item.real_tss !== null && item.inferred_tss !== null) {
+                                tssTurbidityChartLabels.push(`${item.location || '未知地点'}点位 ${item.id || 'N/A'}`);
+                                realTssData.push(item.real_tss);
+                                inferredTssData.push(item.inferred_tss);
+                            }
+                            // Important: Turbidity data should align with TSS data points, or have its own labels
+                            // Assuming for now they share the same set of points and labels based on the first condition
+                            if (item.real_turbidity !== null && item.inferred_turbidity !== null) {
+                                // Only add to labels if not already added by TSS to avoid duplicates
+                                // This assumes TSS and Turbidity data points correspond one-to-one,
+                                // if they can exist independently, this logic needs refinement.
+                                if (!tssTurbidityChartLabels.includes(`${item.location || '未知地点'}点位 ${item.id || 'N/A'}`)) {
+                                     tssTurbidityChartLabels.push(`${item.location || '未知地点'}点位 ${item.id || 'N/A'}`);
+                                }
+                                realTurbidityData.push(item.real_turbidity);
+                                inferredTurbidityData.push(item.inferred_turbidity);
+                            }
+
+                            // Process data for Salinity chart (always use generic "点位 X")
+                            if (item.real_salinity !== null && item.inferred_salinity !== null) {
+                                salinityChartLabels.push(`点位 ${item.id || 'N/A'}`);
+                                realSalinityData.push(item.real_salinity);
+                                inferredSalinityData.push(item.inferred_salinity);
+                            }
+
+                            // Calculate sums for averages
+                            if (item.real_tss !== null) {
+                                realTssSum += item.real_tss;
+                                tssCount++;
+                            }
+                            if (item.real_salinity !== null) {
+                                realSalinitySum += item.real_salinity;
+                                salinityCount++;
+                            }
+                        });
+
+                        // Update average values in the dashboard
+                        document.getElementById('avg-tss').textContent = `${(tssCount > 0 ? realTssSum / tssCount : 0).toFixed(1)} mg/L`;
+                        document.getElementById('avg-salinity').textContent = `${(salinityCount > 0 ? realSalinitySum / salinityCount : 0).toFixed(2)} psu`;
+
+                    } else {
+                        console.warn("Failed to fetch real data for charts. Using mock data.");
+                        // Generate mock data if fetch fails (e.g., if backend is not running or no data)
+                        tssTurbidityChartLabels = Array.from({length: 7}, (_, i) => `模拟点位 ${i + 1}`);
+                        realTssData = [65, 59, 80, 81, 56, 105, 90];
+                        inferredTssData = [68, 62, 78, 83, 59, 102, 93];
+                        realTurbidityData = [15.2, 14.5, 18.0, 17.5, 13.8, 20.1, 16.9];
+                        inferredTurbidityData = [15.8, 14.0, 18.5, 17.0, 14.2, 19.5, 17.3];
+
+                        // Mock data for salinity, now always "点位 X"
+                        salinityChartLabels = Array.from({length: 7}, (_, i) => `点位 ${i + 1}`);
+                        realSalinityData = [0.5, 0.6, 0.55, 0.7, 0.6, 0.8, 0.75];
+                        inferredSalinityData = [0.52, 0.58, 0.57, 0.68, 0.63, 0.77, 0.73];
+
+                        showMessage('图表数据加载失败，已使用模拟数据。', 'error');
+
+                        // Update average values with mock data averages
+                        document.getElementById('avg-tss').textContent = `${(realTssData.reduce((a,b) => a+b, 0) / realTssData.length).toFixed(1)} mg/L`;
+                        document.getElementById('avg-salinity').textContent = `${(realSalinityData.reduce((a,b) => a+b, 0) / realSalinityData.length).toFixed(2)} psu`;
+                    }
+                } catch (error) {
+                    console.error('Error fetching chart data:', error);
+                    console.warn("Network error fetching real data for charts. Using mock data.");
+
+                    tssTurbidityChartLabels = Array.from({length: 7}, (_, i) => `模拟点位 ${i + 1}`);
+                    realTssData = [65, 59, 80, 81, 56, 105, 90];
+                    inferredTssData = [68, 62, 78, 83, 59, 102, 93];
+                    realTurbidityData = [15.2, 14.5, 18.0, 17.5, 13.8, 20.1, 16.9];
+                    inferredTurbidityData = [15.8, 14.0, 18.5, 17.0, 14.2, 19.5, 17.3];
+
+                    // Mock data for salinity, now always "点位 X"
+                    salinityChartLabels = Array.from({length: 7}, (_, i) => `点位 ${i + 1}`);
+                    realSalinityData = [0.5, 0.6, 0.55, 0.7, 0.6, 0.8, 0.75];
+                    inferredSalinityData = [0.52, 0.58, 0.57, 0.68, 0.63, 0.77, 0.73];
+
+                    showMessage('图表数据加载失败：网络错误，已使用模拟数据。', 'error');
+
+                    // Update average values with mock data averages
+                    document.getElementById('avg-tss').textContent = `${(realTssData.reduce((a,b) => a+b, 0) / realTssData.length).toFixed(1)} mg/L`;
+                    document.getElementById('avg-salinity').textContent = `${(realSalinityData.reduce((a,b) => a+b, 0) / realSalinityData.length).toFixed(2)} psu`;
+                }
+
+
+                const tssCtx = document.getElementById('tss-chart').getContext('2d');
+                const salinityCtx = document.getElementById('salinity-chart').getContext('2d');
+                const turbidityCtx = document.getElementById('turbidity-chart').getContext('2d');
+
+                // Destroy existing charts before creating new ones
+                if(tssChart) tssChart.destroy();
+                tssChart = new Chart(tssCtx, {
+                    type: 'line',
+                    data: {
+                        labels: tssTurbidityChartLabels, // Use TSS/Turbidity specific labels
+                        datasets: [
+                            {
+                                label: '悬沙真实值 (mg/L)',
+                                data: realTssData, // Use TSS specific data
+                                borderColor: 'rgb(54, 162, 235)', // Blue
+                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                tension: 0.3,
+                                fill: false,
+                            },
+                            {
+                                label: '悬沙反演值 (mg/L)',
+                                data: inferredTssData, // Use TSS specific data
+                                borderColor: 'rgb(255, 99, 132)', // Red
+                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                tension: 0.3,
+                                fill: false,
+                                borderDash: [5, 5], // Dotted line
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: '悬沙浓度 (mg/L)'}
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            }
+                        }
+                    }
+                });
+
+                if(salinityChart) salinityChart.destroy();
+                salinityChart = new Chart(salinityCtx, {
+                    type: 'line',
+                    data: {
+                        labels: salinityChartLabels, // Use Salinity specific labels (now always "点位 X")
+                        datasets: [
+                            {
+                                label: '盐度真实值 (psu)',
+                                data: realSalinityData, // Use Salinity specific data
+                                borderColor: 'rgb(75, 192, 192)', // Teal
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                tension: 0.3,
+                                fill: false,
+                            },
+                            {
+                                label: '盐度反演值 (psu)',
+                                data: inferredSalinityData, // Use Salinity specific data
+                                borderColor: 'rgb(153, 102, 255)', // Purple
+                                backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                                tension: 0.3,
+                                fill: false,
+                                borderDash: [5, 5],
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: '盐度 (psu)'}
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            }
+                        }
+                    }
+                });
+
+                if(turbidityChart) turbidityChart.destroy();
+                turbidityChart = new Chart(turbidityCtx, {
+                    type: 'line',
+                    data: {
+                        labels: tssTurbidityChartLabels, // Use TSS/Turbidity specific labels
+                        datasets: [
+                            {
+                                label: '浊度真实值 (NTU)',
+                                data: realTurbidityData, // Use Turbidity specific data
+                                borderColor: 'rgb(255, 159, 64)', // Orange
+                                backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                                tension: 0.3,
+                                fill: false,
+                            },
+                            {
+                                label: '浊度反演值 (NTU)',
+                                data: inferredTurbidityData, // Use Turbidity specific data
+                                borderColor: 'rgb(0, 204, 102)', // Green
+                                backgroundColor: 'rgba(0, 204, 102, 0.2)',
+                                tension: 0.3,
+                                fill: false,
+                                borderDash: [5, 5],
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: '浊度 (NTU)'}
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Function to initialize the Leaflet map
+            function initializeMap() {
+                // Ensure the map container exists and is empty
+                const mapContainer = document.getElementById('map');
+                if (!mapContainer) {
+                    console.error("Map container not found!");
+                    return;
+                }
+
+                // If a map already exists, destroy it before re-initializing
+                if (mapContainer._leaflet_map) {
+                    mapContainer._leaflet_map.remove();
+                }
+
+                // Initialize the map with a center coordinate for Hangzhou and zoom level
+                const map = L.map('map').setView([30.2741, 120.1551], 10); // Hangzhou coordinates
+
+                // Store the map instance on the container for later checks
+                mapContainer._leaflet_map = map;
+
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                // Define sample locations for Hangzhou (七堡站 and 盐官)
+                const locations = [
+                    {
+                        name: "七堡站",
+                        lat: 30.2974, // Approximate coordinates for Qibao Station, Hangzhou Metro Line 1
+                        lng: 120.2520,
+                        data: {
+                            tss: "75 mg/L",
+                            salinity: "0.45 psu",
+                            turbidity: "16 NTU"
+                        }
+                    },
+                    {
+                        name: "盐官", // Note: Yanguan is not a subway station, but a general location near Hangzhou
+                        lat: 30.4042,
+                        lng: 120.6056,
+                        data: {
+                            tss: "60 mg/L",
+                            salinity: "0.58 psu",
+                            turbidity: "14 NTU"
+                        }
+                    },
+
+                ];
+
+                // Add markers for each location
+                locations.forEach(location => {
+                    const marker = L.marker([location.lat, location.lng]).addTo(map);
+
+                    // Create a popup content for the marker
+                    const popupContent = `
+                        <div class="font-bold text-gray-800">${location.name}水质监测点</div>
+                        <div class="text-sm text-gray-700 mt-1">
+                            <div>悬沙: ${location.data.tss}</div>
+                            <div>盐度: ${location.data.salinity}</div>
+                            <div>浊度: ${location.data.turbidity}</div>
+                        </div>
+                        <button onclick="zoomToLocation(${location.lat}, ${location.lng}, 15)"
+                                class="mt-2 bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded transition duration-200">
+                            查看详情
+                        </button>
+                    `;
+                    marker.bindPopup(popupContent);
+                });
+
+                // Function to zoom to a specific location (can be called from popup buttons)
+                window.zoomToLocation = function(lat, lng, zoomLevel) {
+                    map.flyTo([lat, lng], zoomLevel, {
+                        duration: 1.5 // Smooth animation
+                    });
+                    // Optionally open popup if needed after zoom
+                    // marker.openPopup();
+                };
+            }
+
+
+            // Function to add messages to the chat window
+            function addChatMessage(message, senderClass) {
+              const messageElement = document.createElement('div');
+              messageElement.classList.add('chat-message', senderClass);
+              if (senderClass === 'ai') {
+                  messageElement.innerHTML = marked.parse(message);} else {
+                  messageElement.textContent = message;}
+
+              chatWindow.appendChild(messageElement);
+              chatWindow.scrollTop = chatWindow.scrollHeight;}
+
+            // Function to send message to AI
+            window.sendChatMessage = async function(presetMessage = null) {
+                let message;
+                if (presetMessage) {
+                    message = presetMessage;
+                    addChatMessage("生成一份AI分析简报", 'user'); // Show user's action
+                } else {
+                    message = chatInput.value.trim();
+                    if (message === '') return;
+                    addChatMessage(message, 'user');
+                }
+                chatInput.value = ''; // Clear input field
+
+                const thinkingMessage = document.createElement('div');
+                thinkingMessage.classList.add('chat-message', 'system');
+                thinkingMessage.id = 'thinking-message';
+                thinkingMessage.textContent = '小水滴正在思考...';
+                chatWindow.appendChild(thinkingMessage);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/chat_with_ai`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: message })
+                    });
+                    const data = await response.json();
+
+                    // Remove thinking message
+                    if (thinkingMessage) {
+                        thinkingMessage.remove();
+                    }
+
+                    if (response.ok) {
+                        addChatMessage(data.ai_response, 'ai');
+                    } else {
+                        addChatMessage(`AI 助手出错：${data.error || '未知错误'}`, 'ai');
+                        console.error('AI Chat Error:', data.error);
+                    }
+                } catch (error) {
+                    // Remove thinking message
+                    if (thinkingMessage) {
+                        thinkingMessage.remove();
+                    }
+                    addChatMessage(`网络错误：无法连接到AI助手。请检查后端服务。`, 'ai');
+                    console.error('Network Error with AI Chat:', error);
+                }
+            };
+
+            // Event Listeners for chat functionality
+            sendChatBtn.addEventListener('click', () => sendChatMessage());
+            generateReportBtn.addEventListener('click', () => sendChatMessage('请根据当前的实时水质监测数据，生成一份详细的AI分析简报。内容应包括各参数的当前状态、与历史数据的对比、潜在风险评估，以及对水域环境管理的建议。'));
+
+
+            function init() {
+                const token = sessionStorage.getItem('authToken');
+                if (token) {
+                    currentUser = JSON.parse(token);
+                    showApp();
+                } else {
+                    authModal.classList.remove('hidden');
+                }
+            }
+
+            init();
+        });
+    </script>
+</body>
+</html>
