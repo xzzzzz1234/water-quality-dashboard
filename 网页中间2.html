@@ -216,8 +216,8 @@
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6">
                             <!-- Summary Cards - will be dynamically updated -->
-                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">区域平均悬沙</h4><p class="text-3xl font-bold text-blue-600 mt-2" id="avg-tss">计算中...</p></div>
-                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">区域平均盐度</h4><p class="text-3xl font-bold text-green-600 mt-2" id="avg-salinity">计算中...</p></div>
+                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">区域平均悬浮物浓度</h4><p class="text-2xl font-bold text-blue-600 mt-2" id="avg-tss">计算中...</p></div>
+                            <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">区域平均浊度</h4><p class="text-2xl font-bold text-green-600 mt-2" id="avg-salinity">计算中...</p></div>
                             <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">AI模型精度 (R²)</h4><p class="text-3xl font-bold text-purple-600 mt-2">0.93</p></div>
                             <div class="glass-effect p-5 rounded-lg"><h4 class="font-bold text-gray-600">当前预警</h4><p class="text-3xl font-bold text-orange-500 mt-2">0个</p></div>
                         </div>
@@ -862,8 +862,12 @@
                         });
 
                         // Update average values in the dashboard
-                        document.getElementById('avg-tss').textContent = `${(tssCount > 0 ? realTssSum / tssCount : 0).toFixed(1)} mg/L`;
-                        document.getElementById('avg-salinity').textContent = `${(salinityCount > 0 ? realSalinitySum / salinityCount : 0).toFixed(2)} psu`;
+                        // Update average values in the dashboard using innerHTML for line breaks
+                        // Update average values in the dashboard
+                       // 正确的做法
+                       // Update average values in the dashboard
+                       document.getElementById('avg-tss').textContent = `七堡：35.49mg/L \n 盐官：32.01 mg/L`;
+                       document.getElementById('avg-salinity').textContent = `七堡：35.22 NTU \n 盐官：28.06 NTU`;
 
                     } else {
                         console.warn("Failed to fetch real data for charts. Using mock data.");
