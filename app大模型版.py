@@ -13,12 +13,13 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Configuration ---
-DATABASE = r'bo_xgboost_results.db'
+DATABASE = r'/var/data/bo_xgboost_results.db'
 app.config['SECRET_KEY'] = 'your_super_secret_key_change_this_in_production'
 app.config['JWT_EXPIRATION_DELTA'] = timedelta(hours=1)
 
 # --- DeepSeek AI Configuration ---
-DEEPSEEK_API_KEY = 'sk-63c0cb337afc4de0830cc24a85abc929'
+# 从环境变量安全地读取API密钥
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
 DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 
 
@@ -234,7 +235,7 @@ def admin_required(f):
 def export_and_update_excel():
     db = get_db()
     cursor = db.cursor()
-    output_dir = "water_data_excel"
+    output_dir = "/var/data/water_data_excel"
     os.makedirs(output_dir, exist_ok=True)
 
     params_to_export = {
